@@ -14,7 +14,111 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      scan_history: {
+        Row: {
+          checks: Json | null
+          confidence: number
+          created_at: string
+          explanation: string | null
+          id: string
+          input_text: string
+          keywords: string[] | null
+          scan_type: string
+          title: string
+          user_id: string
+          verdict: string
+          voice_en: string | null
+          voice_hi: string | null
+        }
+        Insert: {
+          checks?: Json | null
+          confidence: number
+          created_at?: string
+          explanation?: string | null
+          id?: string
+          input_text: string
+          keywords?: string[] | null
+          scan_type: string
+          title: string
+          user_id: string
+          verdict: string
+          voice_en?: string | null
+          voice_hi?: string | null
+        }
+        Update: {
+          checks?: Json | null
+          confidence?: number
+          created_at?: string
+          explanation?: string | null
+          id?: string
+          input_text?: string
+          keywords?: string[] | null
+          scan_type?: string
+          title?: string
+          user_id?: string
+          verdict?: string
+          voice_en?: string | null
+          voice_hi?: string | null
+        }
+        Relationships: []
+      }
+      scan_stats: {
+        Row: {
+          id: string
+          safe_count: number
+          suspicious_count: number
+          threats_found: number
+          total_scans: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          safe_count?: number
+          suspicious_count?: number
+          threats_found?: number
+          total_scans?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          safe_count?: number
+          suspicious_count?: number
+          threats_found?: number
+          total_scans?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
