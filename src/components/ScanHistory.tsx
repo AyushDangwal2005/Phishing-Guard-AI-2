@@ -1,0 +1,102 @@
+import { useState, useEffect } from 'react';
+import { useLang } from './LangProvider';
+import { useScrollReveal } from '@/hooks/use-scroll-reveal';
+
+interface HistoryItem {
+  type: string;
+  input: string;
+  verdict: string;
+  title: string;
+  time: number;
+}
+
+function timeAgo(ts: number) {
+  const diff = Date.now() - ts;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return `${Math.floor(diff / 86400000)}d ago`;
+}
+
+const typeIcons: Record<string, string> = { call: '📞', sms: '💬', link: '🔗', website: '🌐' };
+
+function verdictColor(v: string) {
+  if (v === 'dangerous') return 'hsl(var(--red-500))';
+  if (v === 'suspicious') return 'hsl(var(--amber-500))';
+  return 'hsl(var(--green-500))';
+}
+function verdictBg(v: string) {
+  if (v === 'dangerous') return 'hsl(var(--red-50))';
+  if (v === 'suspicious') return 'hsl(var(--amber-50))';
+  return 'hsl(var(--green-50))';
+}
+
+export default function ScanHistory() {
+  const { t } = useLang();
+  const [items, setItems] = useState<HistoryItem[]>([]);
+  const [open, setOpen] = useState(false);
+  const ref = useScrollReveal();
+
+  const loadHistory = () => {
+    try { setItems(JSON.parse(localStorage.getItem('pg-history') || '[]')); } catch { setItems([]); }
+  };
+
+  useEffect(() => {
+    loadHistory();
+    window.addEventListener('pg-history-update', loadHistory);
+    return () => window.removeEventListener('pg-history-update', loadHistory);
+  }, []);
+
+  const clearAll = () => {
+    localStorage.removeItem('pg-history');
+    setItems([]);
+  };
+
+  return (
+    <div ref={ref} className="max-w-[900px] mx-auto px-8 py-12">
+      <div className="bg-background rounded-2xl overflow-hidden"
+        style={{ border: '1px solid hsl(var(--gray-200))', boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.07)' }}>
+        <button onClick={() => setOpen(!open)}
+          className="w-full flex items-center justify-between p-6 font-heading font-semibold text-lg text-pg-gray-900">
+          <span>{t.history.title} ({items.length})</span>
+          <span className="text-pg-gray-500 text-sm transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }}>▼</span>
+        </button>
+
+        {open && (
+          <div className="px-6 pb-6">
+            {items.length === 0 ? (
+              <p className="font-body text-sm text-pg-gray-500 py-4">{t.history.empty}</p>
+            ) : (
+              <>
+                <div className="relative pl-6">
+                  <div className="absolute left-2 top-0 bottom-0 w-0.5" style={{ background: 'hsl(var(--blue-100))' }} />
+                  {items.map((item, i) => (
+                    <div key={i} className="relative mb-4 last:mb-0">
+                      <div className="absolute -left-[18px] top-2 w-3 h-3 rounded-full" style={{ background: 'hsl(var(--blue-600))', border: '2px solid hsl(var(--blue-100))' }} />
+                      <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'hsl(var(--gray-50))' }}>
+                        <span className="text-lg">{typeIcons[item.type] || '🔍'}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-body text-sm text-pg-gray-700 truncate">{item.input}</p>
+                        </div>
+                        <span className="px-2.5 py-0.5 rounded-full font-mono text-[10px] font-medium uppercase tracking-wider"
+                          style={{ background: verdictBg(item.verdict), color: verdictColor(item.verdict) }}>
+                          {item.verdict}
+                        </span>
+                        <span className="font-mono text-[11px] text-pg-gray-500 whitespace-nowrap">{timeAgo(item.time)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={clearAll}
+                  className="mt-4 px-4 py-2 rounded-xl font-body text-sm font-medium text-destructive hover:bg-pg-red-50 transition-colors"
+                  style={{ border: '1.5px solid hsl(var(--gray-200))' }}>
+                  {t.history.clearAll}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
