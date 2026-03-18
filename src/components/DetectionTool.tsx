@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react';
 import { useLang } from './LangProvider';
-import { useSpeechRecognition } from '@/hooks/use-speech';
-import { useSpeechSynthesis } from '@/hooks/use-speech';
+import { useAuth } from './AuthProvider';
+import { useSpeechRecognition, useSpeechSynthesis } from '@/hooks/use-speech';
 import { useScrollReveal } from '@/hooks/use-scroll-reveal';
 import { analyzeText, analyzeUrl, analyzeWebsite, type AnalysisResult } from '@/lib/analysis-engine';
-import { updateStats } from './LiveStats';
+import { supabase } from '@/integrations/supabase/client';
 import ResultCard from './ResultCard';
 import VoiceAssistant from './VoiceAssistant';
 
@@ -52,15 +52,6 @@ function Spinner() {
   );
 }
 
-function addToHistory(type: string, input: string, result: AnalysisResult) {
-  try {
-    const history = JSON.parse(localStorage.getItem('pg-history') || '[]');
-    history.unshift({ type, input: input.slice(0, 100), verdict: result.verdict, title: result.title, time: Date.now(), result });
-    localStorage.setItem('pg-history', JSON.stringify(history.slice(0, 10)));
-    window.dispatchEvent(new Event('pg-history-update'));
-  } catch {}
-}
-
 type TabKey = 'call' | 'sms' | 'link' | 'website';
 
 const TAB_IMAGES: Record<TabKey, { src: string; alt: string }> = {
@@ -72,6 +63,7 @@ const TAB_IMAGES: Record<TabKey, { src: string; alt: string }> = {
 
 export default function DetectionTool() {
   const { t, lang } = useLang();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabKey>('call');
   const [inputs, setInputs] = useState({ call: '', sms: '', link: '', website: '' });
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -82,24 +74,88 @@ export default function DetectionTool() {
 
   const setInput = (key: TabKey, val: string) => setInputs(prev => ({ ...prev, [key]: val }));
 
+  const saveToDb = async (res: AnalysisResult, input: string) => {
+    if (!user) return;
+    try {
+      // Save scan history
+      await supabase.from('scan_history').insert({
+        user_id: user.id,
+        scan_type: activeTab,
+        input_text: input.slice(0, 2000),
+        verdict: res.verdict,
+        confidence: res.confidence,
+        title: res.title,
+        explanation: res.explanation || '',
+        keywords: res.keywords,
+        checks: res.checks as any,
+        voice_en: res.voiceEN,
+        voice_hi: res.voiceHI,
+      });
+
+      // Update stats
+      const { data: stats } = await supabase.from('scan_stats').select('*').eq('user_id', user.id).single();
+      if (stats) {
+        await supabase.from('scan_stats').update({
+          total_scans: stats.total_scans + 1,
+          threats_found: stats.threats_found + (res.verdict === 'dangerous' ? 1 : 0),
+          safe_count: stats.safe_count + (res.verdict === 'safe' ? 1 : 0),
+          suspicious_count: stats.suspicious_count + (res.verdict === 'suspicious' ? 1 : 0),
+        }).eq('user_id', user.id);
+      }
+      window.dispatchEvent(new Event('pg-stats-update'));
+      window.dispatchEvent(new Event('pg-history-update'));
+    } catch (err) {
+      console.error('Failed to save to DB:', err);
+    }
+  };
+
   const handleAnalyze = useCallback(async () => {
     const input = inputs[activeTab].trim();
     if (!input) return;
     setLoading(true);
     setResult(null);
-    await new Promise(r => setTimeout(r, 1200 + Math.random() * 800));
+
     let res: AnalysisResult;
-    if (activeTab === 'call') res = analyzeText(input, 'call');
-    else if (activeTab === 'sms') res = analyzeText(input, 'sms');
-    else if (activeTab === 'link') res = analyzeUrl(input);
-    else res = analyzeWebsite(input);
+
+    // Try AI edge function first
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-scan', {
+        body: { type: activeTab, input },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      res = data as AnalysisResult;
+    } catch (err) {
+      console.warn('AI analysis failed, falling back to local analysis:', err);
+      // Fallback to local analysis
+      if (activeTab === 'call') res = analyzeText(input, 'call');
+      else if (activeTab === 'sms') res = analyzeText(input, 'sms');
+      else if (activeTab === 'link') res = analyzeUrl(input);
+      else res = analyzeWebsite(input);
+    }
+
     setResult(res);
     setLoading(false);
-    updateStats(res.verdict);
-    addToHistory(activeTab, input, res);
+
+    // Save to database if logged in
+    await saveToDb(res, input);
+
+    // Also update localStorage for non-logged-in view
+    try {
+      const s = JSON.parse(localStorage.getItem('pg-stats') || '{}');
+      s.total = (s.total || 0) + 1;
+      if (res.verdict === 'dangerous') s.threats = (s.threats || 0) + 1;
+      else if (res.verdict === 'safe') s.safe = (s.safe || 0) + 1;
+      else s.suspicious = (s.suspicious || 0) + 1;
+      localStorage.setItem('pg-stats', JSON.stringify(s));
+      window.dispatchEvent(new Event('pg-stats-update'));
+    } catch {}
+
     const voiceText = lang === 'hi' ? res.voiceHI : res.voiceEN;
     speak(voiceText, lang);
-  }, [activeTab, inputs, lang, speak]);
+  }, [activeTab, inputs, lang, speak, user]);
 
   const loadSample = () => {
     setInput(activeTab, SAMPLES[activeTab]);
@@ -122,7 +178,7 @@ export default function DetectionTool() {
 
   return (
     <section id="detection" className="py-20 bg-background">
-      <div ref={ref} className="max-w-[900px] mx-auto px-8">
+      <div ref={ref} className="max-w-[900px] mx-auto px-4 md:px-8">
         <h2 className="font-heading font-bold text-3xl md:text-4xl text-pg-gray-900 tracking-tight text-center mb-10">
           {t.detection.title}
         </h2>
@@ -132,7 +188,7 @@ export default function DetectionTool() {
           {tabs.map(tab => (
             <button key={tab.key}
               onClick={() => { setActiveTab(tab.key); setResult(null); }}
-              className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-xl font-body text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab.key
+              className={`flex-1 min-w-[100px] px-3 py-2.5 rounded-xl font-body text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab.key
                 ? 'bg-background text-primary font-semibold'
                 : 'text-pg-gray-500 hover:bg-background/50'}`}
               style={activeTab === tab.key ? { boxShadow: '0 2px 8px rgba(0,0,0,0.08)', border: '1px solid hsl(var(--gray-200))' } : {}}>
@@ -147,7 +203,7 @@ export default function DetectionTool() {
             className="w-full h-[200px] object-cover" loading="lazy"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
 
-          <div className="p-7">
+          <div className="p-5 md:p-7">
             {isTextTab ? (
               <>
                 <div className="flex items-center gap-3 mb-3">

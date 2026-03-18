@@ -1,4 +1,5 @@
 import { LangProvider } from '@/components/LangProvider';
+import { AuthProvider } from '@/components/AuthProvider';
 import Navbar from '@/components/Navbar';
 import HeroSection from '@/components/HeroSection';
 import TrustBadges from '@/components/TrustBadges';
@@ -10,17 +11,19 @@ import Footer from '@/components/Footer';
 
 export default function Index() {
   return (
-    <LangProvider>
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <HeroSection />
-        <TrustBadges />
-        <HowItWorks />
-        <LiveStats />
-        <DetectionTool />
-        <ScanHistory />
-        <Footer />
-      </div>
-    </LangProvider>
+    <AuthProvider>
+      <LangProvider>
+        <div className="min-h-screen bg-background">
+          <Navbar />
+          <HeroSection />
+          <TrustBadges />
+          <HowItWorks />
+          <LiveStats />
+          <DetectionTool />
+          <ScanHistory />
+          <Footer />
+        </div>
+      </LangProvider>
+    </AuthProvider>
   );
 }
