@@ -35,7 +35,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-10 pt-6 text-center" style={{ borderTop: '1px solid hsl(var(--gray-100))' }}>
-          <p className="font-body text-xs text-pg-gray-500">© 2024 PhishGuard AI. All rights reserved. Built with ❤️ to fight scams.</p>
+          <p className="font-body text-xs text-pg-gray-500">©2026 PhishGuard AI. All rights reserved.</p>
         </div>
       </div>
     </footer>
